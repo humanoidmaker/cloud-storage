@@ -1,0 +1,17 @@
+[run]
+source = app
+omit =
+    app/tasks/*
+    app/main.py
+    */migrations/*
+
+[report]
+show_missing = true
+fail_under = 85
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if __name__ == .__main__
+    raise NotImplementedError
+    pass
+    except ImportError

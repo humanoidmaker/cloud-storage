@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: cloud_storage
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: cloud_storage-backend:latest
+          args: ["api"]
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: cloud_storage-config
+          env:
+            - name: VAULTBOX_DATABASE_URL
+              value: "postgresql+asyncpg://cloud_storage:$(POSTGRES_PASSWORD)@postgres:5432/cloud_storage"
+            - name: VAULTBOX_JWT_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cloud_storage-secrets
+                  key: jwt-secret
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 30

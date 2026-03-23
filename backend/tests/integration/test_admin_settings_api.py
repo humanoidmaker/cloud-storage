@@ -1,0 +1,75 @@
+import uuid
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from app.main import app
+from app.models.user import User
+from app.utils.hashing import hash_password
+from tests.conftest import TestingSessionLocal, auth_headers
+
+
+@pytest_asyncio.fixture
+async def client():
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+@pytest_asyncio.fixture
+async def admin():
+    async with TestingSessionLocal() as session:
+        u = User(id=uuid.uuid4(), email="set_admin@example.com", name="Admin",
+                 password_hash=hash_password("pass"), role="superadmin", storage_used=0, storage_quota=0, is_active=True)
+        session.add(u)
+        await session.commit()
+        await session.refresh(u)
+        return u
+
+
+@pytest.mark.asyncio
+async def test_get_settings(client, admin):
+    h = auth_headers(admin.id, admin.email, admin.role)
+    resp = await client.get("/api/admin/settings", headers=h)
+    assert resp.status_code == 200
+    assert "default_quota_bytes" in resp.json()
+
+
+@pytest.mark.asyncio
+async def test_update_settings(client, admin):
+    h = auth_headers(admin.id, admin.email, admin.role)
+    resp = await client.put("/api/admin/settings", headers=h, json={"default_quota_bytes": 10737418240})
+    assert resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_settings_cached(client, admin):
+    h = auth_headers(admin.id, admin.email, admin.role)
+    await client.put("/api/admin/settings", headers=h, json={"max_file_versions": 20})
+    resp = await client.get("/api/admin/settings", headers=h)
+    assert resp.json()["max_file_versions"] == 20
+
+
+@pytest.mark.asyncio
+async def test_invalid_quota(client, admin):
+    h = auth_headers(admin.id, admin.email, admin.role)
+    resp = await client.put("/api/admin/settings", headers=h, json={"default_quota_bytes": -1})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_invalid_file_size(client, admin):
+    h = auth_headers(admin.id, admin.email, admin.role)
+    resp = await client.put("/api/admin/settings", headers=h, json={"max_upload_size_bytes": 100})
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_non_admin(client):
+    async with TestingSessionLocal() as session:
+        u = User(id=uuid.uuid4(), email="nonadmin_set@example.com", name="User",
+                 password_hash=hash_password("pass"), role="user", storage_used=0, storage_quota=5368709120, is_active=True)
+        session.add(u)
+        await session.commit()
+        h = auth_headers(u.id, u.email, u.role)
+    resp = await client.get("/api/admin/settings", headers=h)
+    assert resp.status_code == 403

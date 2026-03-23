@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cloud_storage-ingress
+  namespace: cloud_storage
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "5g"
+spec:
+  rules:
+    - host: app.cloud_storage.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-app
+                port:
+                  number: 80
+    - host: admin.cloud_storage.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-admin
+                port:
+                  number: 80
+    - host: api.cloud_storage.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8000
+    - host: storage.cloud_storage.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9001

@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  test-postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cloudstorage
+      POSTGRES_PASSWORD: cloudstorage
+      POSTGRES_DB: cloudstorage
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cloudstorage"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  test-redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  test-runner:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: >
+      bash -c "pip install -r requirements-test.txt &&
+               python -m pytest tests/ -v --tb=short --cov=app --cov-report=term-missing"
+    environment:
+      VAULTBOX_DATABASE_URL: postgresql+asyncpg://cloudstorage:cloudstorage@test-postgres:5432/cloud_storage_test
+      VAULTBOX_REDIS_URL: redis://test-redis:6379/0
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
